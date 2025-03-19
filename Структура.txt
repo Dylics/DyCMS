@@ -1,0 +1,23 @@
+/Корневая папка хостинга
+├── /core
+│   └── app.php         # Ядро CMS с маршрутизацией, БД и PHPMailer
+├── /admin
+│   └── index.php       # Админ-панель с красивым дизайном
+├── /themes
+│   ├── /test
+│   │   ├── template.php
+│   │   └── reset.php
+│   │   ├── register.php
+│   │   └── nav.php
+│   │   ├── main.php
+│   │   └── login.php
+│   │   ├── home.php
+│   │   └── header.php
+│   │   ├── footer.php
+│   │   └── assets
+├── /plugins
+│   └── example_plugin.php # Пример плагина
+├── /vendor             # PHPMailer (установлен через Composer)
+├── .htaccess           # Маршрутизация
+├── index.php           # Точка входа фронтенда
+└── install.php         # Установка CMS
