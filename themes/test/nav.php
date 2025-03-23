@@ -1,0 +1,1 @@
+<nav><?php foreach (get_categories() as $c) { echo "<a href=\"/category/{$c['slug']}\">" . htmlspecialchars($c['name']) . "</a> "; } ?></nav>

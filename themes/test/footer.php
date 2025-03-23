@@ -1,0 +1,1 @@
+<footer>© <?php echo date("Y"); ?> <?php echo htmlspecialchars(get_setting("site_name")); ?></footer>

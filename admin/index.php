@@ -2,6 +2,19 @@
 session_start();
 require_once __DIR__ . '/../core/app.php';
 
+$theme = get_setting('active_theme'); // Дефолтная тема из настроек
+if (isset($_SESSION['preview_theme'])) {
+    $theme = $_SESSION['preview_theme'];
+    unset($_SESSION['preview_theme']); // Сбрасываем сразу после использования
+}
+
+// Обработка предпросмотра темы
+if (isset($_GET['action']) && $_GET['action'] === 'themes' && isset($_GET['preview_theme'])) {
+    if (!auth_check('admin')) die("Доступ запрещён");
+    $_SESSION['preview_theme'] = $_GET['preview_theme'];
+    header('Location: /');
+    exit;
+}
 
  // Экспорт темы
 if (isset($_GET['action']) && $_GET['action'] === 'themes' && isset($_GET['edit']) && isset($_GET['export'])) {
@@ -134,7 +147,36 @@ $action = $_GET['action'] ?? 'dashboard';
         .hint { color: #888; font-size: 0.9em; }
         .fade-in { animation: fadeIn 0.5s ease-in; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
+.ql-container {
+    font-family: 'Poppins', sans-serif;
+    font-size: 14px;
+    border-radius: 0 0 8px 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+.ql-toolbar {
+    border-radius: 8px 8px 0 0;
+    background: #fff;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.05);
+}
+.file-item {
+    padding: 5px 10px;
+    background: #f8f9fa;
+    border-radius: 5px;
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.file-list .file-item {
+    display: flex;
+    align-items: center;
+}
+.file-list .file-item input {
+    margin-right: 10px;
+}
+.sortable { cursor: pointer; }
+.sortable.asc i::before { content: '\f0de'; } /* fa-sort-up */
+.sortable.desc i::before { content: '\f0dd'; } /* fa-sort-down */
         /* Стили для редактора тем */
         <?php if ($action === 'themes'): ?>
         .content { display: flex; height: 100vh; }
@@ -231,33 +273,7 @@ $action = $_GET['action'] ?? 'dashboard';
 .editor-header .d-flex.gap-2 a:last-child {
     margin-right: 0; /* Убираем отступ у последней кнопки */
 }
-.ql-container {
-    font-family: 'Poppins', sans-serif;
-    font-size: 14px;
-    border-radius: 0 0 8px 8px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-}
-.ql-toolbar {
-    border-radius: 8px 8px 0 0;
-    background: #fff;
-    box-shadow: 0 1px 5px rgba(0,0,0,0.05);
-}
-.file-item {
-    padding: 5px 10px;
-    background: #f8f9fa;
-    border-radius: 5px;
-    margin-bottom: 5px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-.file-list .file-item {
-    display: flex;
-    align-items: center;
-}
-.file-list .file-item input {
-    margin-right: 10px;
-}
+
         <?php endif; ?>
     </style>
 </head>
@@ -267,7 +283,16 @@ $action = $_GET['action'] ?? 'dashboard';
         <a href="?action=dashboard" class="<?php echo $action === 'dashboard' ? 'active' : ''; ?>">Главная</a>
         <?php if (auth_check('admin')): ?>
             <a href="?action=posts" class="<?php echo $action === 'posts' ? 'active' : ''; ?>">Посты</a>
-            <a href="?action=comments" class="<?php echo $action === 'comments' ? 'active' : ''; ?>">Комментарии</a>
+            <a href="?action=comments" class="<?php echo $action === 'comments' ? 'active' : ''; ?>">
+				Комментарии
+				<?php
+				$conn = db_connect();
+				$pending = mysqli_fetch_row(mysqli_query($conn, "SELECT COUNT(*) FROM comments WHERE status='pending'"))[0];
+				if ($pending > 0) {
+					echo "<span class='badge bg-danger ms-2'>$pending</span>";
+				}
+				?>
+			</a>
             <a href="?action=pages" class="<?php echo $action === 'pages' ? 'active' : ''; ?>">Страницы</a>
             <a href="?action=users" class="<?php echo $action === 'users' ? 'active' : ''; ?>">Пользователи</a>
             <a href="?action=categories" class="<?php echo $action === 'categories' ? 'active' : ''; ?>">Категории</a>
@@ -279,6 +304,9 @@ $action = $_GET['action'] ?? 'dashboard';
         <a href="/logout">Выход</a>
     </div>
     <div class="content">
+	<div class="mb-3">
+    <input type="text" class="form-control" id="contentSearch" placeholder="Поиск по <?php echo $action; ?>...">
+	</div>
         <?php
         switch ($action) {
 case 'dashboard':
@@ -433,7 +461,26 @@ case 'dashboard':
 case 'posts':
     if (!auth_check('admin')) die("Доступ запрещён");
     $posts = get_posts();
-    
+	
+	if (isset($_GET['bulk_delete'])) {
+    csrf_check();
+    $ids = explode(',', $_GET['bulk_delete']);
+    foreach ($ids as $id) {
+        if (is_numeric($id)) delete_post($id);
+    }
+    $posts = get_posts();
+    echo "<div class='alert alert-success'>Выбранные посты удалены</div>";
+}
+	
+    if (isset($_GET['preview']) && is_numeric($_GET['preview'])) {
+        $post = array_filter($posts, fn($p) => $p['id'] == $_GET['preview']);
+        $post = reset($post);
+        echo "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Предпросмотр</title></head><body>";
+        echo "<h1>" . htmlspecialchars($post['title']) . "</h1>";
+        echo $post['content'];
+        echo "</body></html>";
+        exit;
+    }
     // Обработка загрузки файлов при создании/редактировании поста
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['title']) && isset($_POST['content'])) {
         csrf_check();
@@ -512,35 +559,44 @@ $post_id = add_post($_POST['title'], $_POST['content'], $_POST['category_id'] ??
         echo "<div class='alert alert-success'>Пост удалён</div>";
     }
     ?>
+	
+	<?php 
+	function slugify($text) {
+    return preg_replace('/^-+|-+$/', '', preg_replace('/[^a-z0-9]+/', '-', strtolower($text)));
+}
+?>
     <!-- HTML-код для отображения постов и модальных окон -->
-    <h1 class="mb-4">Посты</h1>
-    <button class="btn btn-modern mb-3" data-bs-toggle="modal" data-bs-target="#addPostModal">Добавить пост</button>
-    <table class="table table-striped">
-        <thead>
-            <tr><th>ID</th><th>Заголовок</th><th>Категория</th><th>Дата</th><th>Файлы</th><th>Действия</th></tr>
-        </thead>
-        <tbody>
-            <?php foreach ($posts as $post): ?>
-                <tr>
-                    <td><?php echo $post['id']; ?></td>
-                    <td><?php echo htmlspecialchars($post['title']); ?></td>
-                    <td><?php echo htmlspecialchars($post['category_name'] ?? 'Без категории'); ?></td>
-                    <td><?php echo $post['created_at']; ?></td>
-                    <td>
-                        <?php 
-                        $files = get_post_files($post['id']);
-                        echo count($files) . ' файл(ов)';
-                        ?>
-                    </td>
-                    <td>
-                        <a href="?action=posts&edit=<?php echo $post['id']; ?>" class="btn btn-sm btn-warning">Редактировать</a>
-                        <a href="<?php echo 'http://' . $_SERVER['HTTP_HOST'] . '/post/' . htmlspecialchars($post['slug']); ?>" class="btn btn-sm btn-info" target="_blank">Просмотр</a>
-                        <a href="?action=posts&delete=<?php echo $post['id']; ?>" class="btn btn-sm btn-danger" onclick="return confirm('Удалить пост?')">Удалить</a>
-                    </td>
-                </tr>
-            <?php endforeach; ?>
-        </tbody>
-    </table>
+<div class="mb-3">
+	<button class="btn btn-modern mb-3" data-bs-toggle="modal" data-bs-target="#addPostModal">Добавить пост</button>
+    <button class="btn btn-danger mb-3" id="bulkDeletePosts" disabled>Удалить выбранное</button>
+</div>
+<table class="table table-striped">
+    <thead>
+        <tr><th><input type="checkbox" id="selectAllPosts"></th><th>ID</th><th>Заголовок</th><th>Категория</th><th>Дата</th><th>Файлы</th><th>Действия</th></tr>
+    </thead>
+    <tbody>
+        <?php foreach ($posts as $post): ?>
+            <tr>
+                <td><input type="checkbox" name="bulk[]" value="<?php echo $post['id']; ?>"></td>
+                <td><?php echo $post['id']; ?></td>
+                <td><?php echo htmlspecialchars($post['title']); ?></td>
+                <td><?php echo htmlspecialchars($post['category_name'] ?? 'Без категории'); ?></td>
+                <td><?php echo $post['created_at']; ?></td>
+                <td>
+                    <?php 
+                    $files = get_post_files($post['id']);
+                    echo count($files) . ' файл(ов)';
+                    ?>
+                </td>
+                <td>
+                    <a href="?action=posts&edit=<?php echo $post['id']; ?>" class="btn btn-sm btn-warning">Редактировать</a>
+                    <a href="?action=posts&preview=<?php echo $post['id']; ?>" class="btn btn-sm btn-info" target="_blank">Предпросмотр</a>
+                    <a href="?action=posts&delete=<?php echo $post['id']; ?>" class="btn btn-sm btn-danger" onclick="return confirm('Удалить пост?')">Удалить</a>
+                </td>
+            </tr>
+        <?php endforeach; ?>
+    </tbody>
+</table>
 <!-- Модальное окно для добавления поста -->
 <div class="modal fade" id="addPostModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
@@ -554,7 +610,13 @@ $post_id = add_post($_POST['title'], $_POST['content'], $_POST['category_id'] ??
                     <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
                     <div class="mb-3">
                         <label class="form-label">Заголовок</label>
-                        <input type="text" name="title" class="form-control" required>
+					<div class="mb-3">
+						<input type="text" class="form-control" id="title" name="title" value="<?php echo htmlspecialchars($page['title'] ?? ''); ?>" required>
+					</div>
+					<div class="mb-3">
+						<label for="slug" class="form-label">Slug</label>
+						<input type="text" class="form-control" id="slug" name="slug" value="<?php echo htmlspecialchars($page['slug'] ?? ''); ?>">
+					</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Категория</label>
@@ -783,6 +845,14 @@ $post_id = add_post($_POST['title'], $_POST['content'], $_POST['category_id'] ??
 case 'pages':
     if (!auth_check('admin')) die("Доступ запрещён");
     $pages = get_pages();
+	if (isset($_GET['preview']) && is_numeric($_GET['preview'])) {
+        $page = get_page($_GET['preview']);
+        echo "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Предпросмотр</title></head><body>";
+        echo "<h1>" . htmlspecialchars($page['title']) . "</h1>";
+        echo $page['content'];
+        echo "</body></html>";
+        exit;
+    }
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['title']) && isset($_POST['content']) && isset($_POST['slug'])) {
         csrf_check();
         add_page($_POST['title'], $_POST['content'], $_POST['slug'], $_POST['use_template'] ?? 0, $_POST['is_home'] ?? 0);
@@ -820,9 +890,10 @@ case 'pages':
                     <td><?php echo $page['use_template'] ? 'Да' : 'Нет'; ?></td>
                     <td><?php echo $page['is_home'] ? 'Да' : 'Нет'; ?></td>
                     <td>
-                        <a href="?action=pages&edit=<?php echo $page['id']; ?>" class="btn btn-sm btn-warning">Редактировать</a>
-                        <a href="?action=pages&delete=<?php echo $page['id']; ?>" class="btn btn-sm btn-danger" onclick="return confirm('Удалить страницу?')">Удалить</a>
-                    </td>
+						<a href="?action=pages&edit=<?php echo $page['id']; ?>" class="btn btn-sm btn-warning">Редактировать</a>
+						<a href="?action=pages&preview=<?php echo $page['id']; ?>" class="btn btn-sm btn-info" target="_blank">Предпросмотр</a>
+						<a href="?action=pages&delete=<?php echo $page['id']; ?>" class="btn btn-sm btn-danger" onclick="return confirm('Удалить страницу?')">Удалить</a>
+					</td>
                 </tr>
             <?php endforeach; ?>
         </tbody>
@@ -1743,23 +1814,28 @@ if (isset($_GET['backup']) && in_array($_GET['backup'], $themes)) {
                                 <td><?php echo htmlspecialchars($theme); ?></td>
                                 <td><?php echo $theme === $active_theme ? 'Активна' : 'Неактивна'; ?></td>
                                 <td>
-                                    <div class="btn-group" role="group">
-                                        <?php if ($theme !== $active_theme): ?>
-                                            <form method="post" class="d-inline me-1">
-                                                <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
-                                                <input type="hidden" name="theme" value="<?php echo htmlspecialchars($theme); ?>">
-                                                <button type="submit" class="btn btn-sm btn-success" title="Активировать">
-                                                    <i class="fas fa-check"></i>
-                                                </button>
-                                            </form>
-                                            <a href="?action=themes&delete=<?php echo urlencode($theme); ?>" class="btn btn-sm btn-danger me-1" onclick="return confirm('Удалить тему?')" title="Удалить">
-                                                <i class="fas fa-trash"></i>
-                                            </a>
-                                        <?php endif; ?>
-                                        <a href="?action=themes&edit=<?php echo urlencode($theme); ?>" class="btn btn-sm btn-warning" title="Редактировать">
-                                            <i class="fas fa-edit"></i>
-                                        </a>
-                                    </td>
+<td>
+    <div class="btn-group" role="group">
+        <?php if ($theme !== $active_theme): ?>
+            <form method="post" class="d-inline me-1">
+                <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
+                <input type="hidden" name="theme" value="<?php echo htmlspecialchars($theme); ?>">
+                <button type="submit" class="btn btn-sm btn-success" title="Активировать">
+                    <i class="fas fa-check"></i>
+                </button>
+            </form>
+            <a href="?action=themes&delete=<?php echo urlencode($theme); ?>" class="btn btn-sm btn-danger me-1" onclick="return confirm('Удалить тему?')" title="Удалить">
+                <i class="fas fa-trash"></i>
+            </a>
+        <?php endif; ?>
+        <a href="?action=themes&edit=<?php echo urlencode($theme); ?>" class="btn btn-sm btn-warning me-1" title="Редактировать">
+            <i class="fas fa-edit"></i>
+        </a>
+        <a href="?action=themes&preview_theme=<?php echo urlencode($theme); ?>" class="btn btn-sm btn-info" target="_blank" title="Предпросмотр">
+            <i class="fas fa-eye"></i>
+        </a>
+    </div>
+</td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -1891,7 +1967,24 @@ case 'filemanager':
             $files = get_all_files();
         }
     }
-    
+
+	if (isset($_GET['upload']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
+		csrf_check();
+		foreach ($_FILES['attachments']['name'] as $i => $name) {
+			if ($_FILES['attachments']['error'][$i] === UPLOAD_ERR_OK) {
+				$file = [
+					'name' => $name,
+					'type' => $_FILES['attachments']['type'][$i],
+					'tmp_name' => $_FILES['attachments']['tmp_name'][$i],
+					'error' => $_FILES['attachments']['error'][$i],
+					'size' => $_FILES['attachments']['size'][$i]
+				];
+				upload_file($file, null); // Функция upload_file уже есть в коде
+			}
+		}
+		exit;
+	}
+
     if (isset($_GET['attach']) && is_numeric($_GET['attach']) && isset($_GET['post_id']) && is_numeric($_GET['post_id'])) {
         csrf_check();
         if (attach_file_to_post($_GET['attach'], $_GET['post_id'])) {
@@ -1899,35 +1992,66 @@ case 'filemanager':
             $files = get_all_files();
         }
     }
+	if (isset($_GET['bulk_delete'])) {
+    csrf_check();
+    $ids = explode(',', $_GET['bulk_delete']);
+    foreach ($ids as $id) {
+        if (is_numeric($id)) delete_file($id);
+    }
+    echo "<div class='alert alert-success'>Выбранные файлы удалены</div>";
+    $files = get_all_files();
+}
     ?>
     <h1 class="mb-4">Файловый менеджер</h1>
     <div class="row mb-3">
         <div class="col-md-4">
-            <input type="text" class="form-control" id="fileSearch" placeholder="Поиск файлов...">
+            
         </div>
     </div>
+	<div class="mb-3">
+
+    <input type="file" id="multiUpload" class="form-control" multiple>
+    <div id="uploadProgress" class="progress mt-2" style="display: none;">
+        <div class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+    </div>
+</div>
+
+<div id="contextMenu" class="dropdown-menu" style="position: absolute; display: none;">
+    <a class="dropdown-item context-download">Скачать</a>
+    <a class="dropdown-item context-copy">Копировать ссылку</a>
+    <a class="dropdown-item context-delete">Удалить</a>
+</div>
+
+<button class="btn btn-danger mb-3" id="bulkDeleteFiles" disabled>Удалить выбранное</button>
+
     <table class="table table-striped">
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Имя файла</th>
-                <th>Размер</th>
-                <th>Тип</th>
-                <th>Дата загрузки</th>
-                <th>Загрузил</th>
-                <th>Прикреплён к посту</th>
-                <th>Действия</th>
-            </tr>
-        </thead>
+<thead>
+    <tr>
+        <th><input type="checkbox" id="selectAllFiles"></th>
+        <th>ID</th>
+        <th class="sortable" data-sort="name">Имя файла <i class="fas fa-sort"></i></th>
+        <th class="sortable" data-sort="size">Размер <i class="fas fa-sort"></i></th>
+        <th>Тип</th>
+        <th class="sortable" data-sort="date">Дата загрузки <i class="fas fa-sort"></i></th>
+        <th>Загрузил</th>
+        <th>Прикреплён к посту</th>
+        <th>Действия</th>
+    </tr>
+</thead>
         <tbody id="fileTable">
             <?php foreach ($files as $file): ?>
                 <tr>
+				<td><input type="checkbox" name="fileIds[]" value="<?php echo $file['id']; ?>"></td>
                     <td><?php echo $file['id']; ?></td>
-                    <td>
-                        <a href="/uploads/<?php echo $file['filename']; ?>" target="_blank">
-                            <?php echo htmlspecialchars($file['original_name']); ?>
-                        </a>
-                    </td>
+<td>
+    <a href="/uploads/<?php echo $file['filename']; ?>" target="_blank" 
+       data-bs-toggle="tooltip" data-bs-html="true" 
+       data-file="<?php echo $file['filename']; ?>" 
+       data-type="<?php echo $file['mime_type']; ?>" 
+       class="file-tooltip">
+        <?php echo htmlspecialchars($file['original_name']); ?>
+    </a>
+</td>
                     <td><?php echo round($file['size']/1024, 2); ?> KB</td>
                     <td><?php echo $file['mime_type']; ?></td>
                     <td><?php echo $file['upload_date']; ?></td>
@@ -1941,6 +2065,7 @@ case 'filemanager':
                     <td>
                         <div class="btn-group">
                             <a href="/uploads/<?php echo $file['filename']; ?>" class="btn btn-sm btn-primary" download="<?php echo htmlspecialchars($file['original_name']); ?>">Скачать</a>
+							<a href="/uploads/<?php echo $file['filename']; ?>" class="btn btn-sm btn-info preview-btn" data-file="<?php echo $file['filename']; ?>" data-type="<?php echo $file['mime_type']; ?>" data-bs-toggle="modal" data-bs-target="#previewFileModal">Предпросмотр</a>
                             <?php if (!$file['post_id']): ?>
                                 <button class="btn btn-sm btn-success attach-btn" 
                                         data-file-id="<?php echo $file['id']; ?>" 
@@ -1956,6 +2081,19 @@ case 'filemanager':
             <?php endforeach; ?>
         </tbody>
     </table>
+
+
+<div class="modal fade" id="previewFileModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Предпросмотр файла</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="previewFileContent"></div>
+        </div>
+    </div>
+</div>
 
     <!-- Модальное окно для прикрепления файла -->
     <div class="modal fade" id="attachModal" tabindex="-1">
@@ -2069,7 +2207,13 @@ case 'filemanager':
 			
 					echo "<div class='alert alert-success'>Настройки сохранены</div>";
 				}
-			
+				
+				$use_php_mail = get_setting('use_php_mail');
+				
+				if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['use_php_mail'])) {
+				update_setting('use_php_mail', $_POST['use_php_mail']);
+				}
+				
 				// Загружаем текущие настройки
 				$result = mysqli_query($conn, "SELECT name, value FROM settings");
 				$settings = [];
@@ -2100,6 +2244,15 @@ case 'filemanager':
 						<input class="form-check-input" type="checkbox" name="auto_approve_comments" value="1" id="autoApproveComments" <?php echo ($settings['auto_approve_comments'] ?? 0) ? 'checked' : ''; ?>>
 						<label class="form-check-label" for="autoApproveComments">Автоматически одобрять комментарии</label>
 					</div>
+					
+					<div class="form-group mb-3">
+					<label for="use_php_mail">Использовать PHP mail() вместо PHPMailer</label>
+					<select name="use_php_mail" id="use_php_mail" class="form-control">
+						<option value="0" <?php echo $use_php_mail == '0' ? 'selected' : ''; ?>>Нет (использовать PHPMailer)</option>
+						<option value="1" <?php echo $use_php_mail == '1' ? 'selected' : ''; ?>>Да (использовать mail())</option>
+					</select>
+					</div>
+					
 					<div class="mb-3">
 						<label class="form-label">SMTP Хост</label>
 						<input type="text" name="smtp_host" class="form-control" value="<?php echo htmlspecialchars($settings['smtp_host'] ?? ''); ?>">
@@ -2135,7 +2288,7 @@ case 'filemanager':
         }
         ?>
     </div>
-
+<?php unset($_SESSION['preview_theme']); ?>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.7/codemirror.min.js"></script>
@@ -2313,6 +2466,94 @@ document.addEventListener('DOMContentLoaded', () => {
 </style>
 
 <script>
+
+document.querySelectorAll('.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+        const table = th.closest('table');
+        const tbody = table.querySelector('tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        const index = Array.from(th.parentNode.children).indexOf(th);
+        const isAsc = th.classList.contains('asc');
+        const direction = isAsc ? 'desc' : 'asc';
+
+        document.querySelectorAll('.sortable').forEach(t => t.classList.remove('asc', 'desc'));
+        th.classList.add(direction);
+
+        rows.sort((a, b) => {
+            let aVal = a.children[index].textContent.trim();
+            let bVal = b.children[index].textContent.trim();
+            if (th.dataset.sort === 'size') {
+                aVal = parseFloat(aVal) || 0;
+                bVal = parseFloat(bVal) || 0;
+            } else if (th.dataset.sort === 'date') {
+                aVal = new Date(aVal);
+                bVal = new Date(bVal);
+            }
+            return direction === 'asc' ? (aVal > bVal ? 1 : -1) : (aVal < bVal ? 1 : -1);
+        });
+
+        rows.forEach(row => tbody.appendChild(row));
+    });
+});
+
+document.getElementById('selectAllFiles').addEventListener('change', (e) => {
+    document.querySelectorAll('input[name="fileIds[]"]').forEach(cb => cb.checked = e.target.checked);
+    document.getElementById('bulkDeleteFiles').disabled = !e.target.checked;
+});
+document.querySelectorAll('input[name="fileIds[]"]').forEach(cb => {
+    cb.addEventListener('change', () => {
+        document.getElementById('bulkDeleteFiles').disabled = !document.querySelectorAll('input[name="fileIds[]"]:checked').length;
+    });
+});
+document.getElementById('bulkDeleteFiles').addEventListener('click', () => {
+    if (confirm('Удалить выбранные файлы?')) {
+        const ids = Array.from(document.querySelectorAll('input[name="fileIds[]"]:checked')).map(cb => cb.value);
+        window.location.href = `?action=filemanager&bulk_delete=${ids.join(',')}&csrf_token=<?php echo $_SESSION['csrf_token']; ?>`;
+    }
+});
+
+document.getElementById('multiUpload').addEventListener('change', (e) => {
+    const files = e.target.files;
+    const formData = new FormData();
+    for (let file of files) {
+        formData.append('attachments[]', file);
+    }
+    formData.append('csrf_token', '<?php echo $_SESSION['csrf_token']; ?>');
+
+    const progressBar = document.querySelector('#uploadProgress .progress-bar');
+    document.getElementById('uploadProgress').style.display = 'block';
+
+    fetch('?action=filemanager&upload', {
+        method: 'POST',
+        body: formData
+    }).then(response => {
+        progressBar.style.width = '100%';
+        progressBar.textContent = '100%';
+        setTimeout(() => location.reload(), 1000); // Обновление страницы после загрузки
+    }).catch(err => {
+        console.error(err);
+        progressBar.classList.add('bg-danger');
+        progressBar.textContent = 'Ошибка';
+    });
+});
+
+document.querySelectorAll('.preview-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const file = btn.dataset.file;
+        const type = btn.dataset.type;
+        const previewContent = document.getElementById('previewFileContent');
+        if (type.startsWith('image/')) {
+            previewContent.innerHTML = `<img src="/uploads/${file}" class="img-fluid" style="max-height: 500px;">`;
+        } else if (type === 'text/plain') {
+            fetch(`/uploads/${file}`).then(res => res.text()).then(text => {
+                previewContent.innerHTML = `<pre>${text}</pre>`;
+            });
+        } else {
+            previewContent.innerHTML = '<p>Предпросмотр недоступен для этого типа файла</p>';
+        }
+    });
+});
+
 document.addEventListener('DOMContentLoaded', () => {
     // Переменная для хранения предыдущего модального окна
     let previousModal = null;
@@ -2667,6 +2908,135 @@ document.addEventListener('DOMContentLoaded', () => {
         const modalInstance = new bootstrap.Modal(editPostModal);
         modalInstance.show();
     }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    const searchInput = document.getElementById('contentSearch');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            const search = e.target.value.toLowerCase();
+            document.querySelectorAll('table tbody tr').forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(search) ? '' : 'none';
+            });
+        });
+    }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    const selectAll = document.getElementById('selectAllPosts');
+    const bulkDelete = document.getElementById('bulkDeletePosts');
+    const checkboxes = document.querySelectorAll('input[name="bulk[]"]');
+
+    selectAll.addEventListener('change', () => {
+        checkboxes.forEach(cb => cb.checked = selectAll.checked);
+        bulkDelete.disabled = !selectAll.checked && !Array.from(checkboxes).some(cb => cb.checked);
+    });
+
+    checkboxes.forEach(cb => {
+        cb.addEventListener('change', () => {
+            bulkDelete.disabled = !Array.from(checkboxes).some(cb => cb.checked);
+        });
+    });
+
+    bulkDelete.addEventListener('click', () => {
+        if (confirm('Удалить выбранные посты?')) {
+            const selected = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+            window.location.href = `?action=posts&bulk_delete=${selected.join(',')}&csrf_token=<?php echo $_SESSION['csrf_token']; ?>`;
+        }
+    });
+});
+
+
+document.addEventListener('DOMContentLoaded', () => {
+    const titleInput = document.getElementById('title');
+    const slugInput = document.getElementById('slug');
+    
+    if (titleInput && slugInput) {
+        let isSlugManuallyEdited = false;
+
+        slugInput.addEventListener('input', () => {
+            isSlugManuallyEdited = true;
+        });
+
+        titleInput.addEventListener('input', () => {
+            const titleValue = titleInput.value;
+            const generatedSlug = transliterateSlug(titleValue);
+            
+            if (!isSlugManuallyEdited || !slugInput.value) {
+                slugInput.value = generatedSlug;
+            }
+        });
+    } 
+});
+
+function transliterateSlug(text) {
+    const translitMap = {
+        'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e', 'ж': 'zh',
+        'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o',
+        'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'ts',
+        'ч': 'ch', 'ш': 'sh', 'щ': 'sch', 'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu',
+        'я': 'ya', ' ': '-'
+    };
+
+    text = text.toLowerCase();
+    let slug = '';
+    
+    for (let char of text) {
+        slug += translitMap[char] || (/[a-z0-9]/.test(char) ? char : '-');
+    }
+    
+    slug = slug.replace(/[^a-z0-9-]+/g, '')
+               .replace(/-+/g, '-')
+               .replace(/(^-|-$)/g, '');
+    
+    return slug;
+}
+
+const contextMenu = document.getElementById('contextMenu');
+document.querySelectorAll('#fileTable tr').forEach(row => {
+    row.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const fileUrl = row.querySelector('a').href;
+        const fileId = row.querySelector('input[name="fileIds[]"]').value;
+
+        contextMenu.style.top = `${e.pageY}px`;
+        contextMenu.style.left = `${e.pageX}px`;
+        contextMenu.style.display = 'block';
+
+        contextMenu.querySelector('.context-download').onclick = () => window.location.href = fileUrl;
+        contextMenu.querySelector('.context-copy').onclick = () => navigator.clipboard.writeText(fileUrl);
+        contextMenu.querySelector('.context-delete').onclick = () => {
+            if (confirm('Удалить файл?')) window.location.href = `?action=filemanager&delete=${fileId}&csrf_token=<?php echo $_SESSION['csrf_token']; ?>`;
+        };
+    });
+});
+document.addEventListener('click', () => contextMenu.style.display = 'none');
+
+document.querySelectorAll('.file-tooltip').forEach(link => {
+    const tooltip = new bootstrap.Tooltip(link, {
+		trigger: 'hover',
+        customClass: 'file-tooltip-preview',
+        placement: 'right',
+        delay: { show: 300, hide: 100 }
+    });
+
+    link.addEventListener('mouseover', () => {
+        const file = link.dataset.file;
+        const type = link.dataset.type;
+        let content = 'Предпросмотр недоступен';
+        if (type.startsWith('image/')) {
+            content = `<img src="/uploads/${file}" width="200" height="200" >`;
+        } else if (type === 'text/plain') {
+            fetch(`/uploads/${file}`).then(res => res.text()).then(text => {
+                tooltip._config.title = `<pre max-width="400" max-height="400">${text.slice(0, 500)}</pre>`;
+                tooltip.update();
+            });
+            content = 'Загрузка...';
+        }
+        tooltip._config.title = content;
+        tooltip.update();
+    });
 });
 </script>
 </html>

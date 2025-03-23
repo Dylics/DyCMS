@@ -1,4 +1,5 @@
-    <!DOCTYPE html>
+   <?php require_once __DIR__ . "/../../core/app.php"; handle_reset_password_request(); ?>
+   <!DOCTYPE html>
     <html lang="ru">
     <head>
         <meta charset="UTF-8">

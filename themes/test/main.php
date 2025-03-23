@@ -1,0 +1,1 @@
+<main><?php if ($page_param === "home") { $posts = get_posts(); foreach ($posts as $p) { echo "<h2>" . htmlspecialchars($p["title"]) . "</h2>"; } } elseif ($page) { echo $page["content"]; } ?></main>

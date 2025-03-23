@@ -1,0 +1,1 @@
+<header><h1><?php echo htmlspecialchars(get_setting("site_name")); ?></h1></header>

@@ -50,86 +50,86 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$conn) {
             $error = "Ошибка подключения к базе данных.";
         } else {
-			$tables = [
-				"CREATE TABLE users (
-					id INT AUTO_INCREMENT PRIMARY KEY,
-					username VARCHAR(50) NOT NULL UNIQUE,
-					password VARCHAR(255) NOT NULL,
-					email VARCHAR(100) NOT NULL UNIQUE,
-					role ENUM('user', 'editor', 'admin') DEFAULT 'user',
-					created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-				)",
-				"CREATE TABLE categories (
-					id INT AUTO_INCREMENT PRIMARY KEY,
-					name VARCHAR(100) NOT NULL,
-					slug VARCHAR(100) NOT NULL UNIQUE,
-					description TEXT
-				)",
-				"CREATE TABLE settings (
-					name VARCHAR(100) NOT NULL PRIMARY KEY,
-					value TEXT NOT NULL
-				)",
-				"CREATE TABLE posts (
-					id INT AUTO_INCREMENT PRIMARY KEY,
-					title VARCHAR(255) NOT NULL,
-					content TEXT NOT NULL,
-					user_id INT,
-					category_id INT,
-					created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-					FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
-					FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
-				)",
-				"CREATE TABLE comments (
-					id INT AUTO_INCREMENT PRIMARY KEY,
-					post_id INT NOT NULL,
-					user_id INT DEFAULT NULL,
-					content TEXT NOT NULL,
-					created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-					updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-					status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
-					FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
-					FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
-				)",
-				"CREATE TABLE password_resets (
-					id INT AUTO_INCREMENT PRIMARY KEY,
-					user_id INT NOT NULL,
-					token VARCHAR(64) NOT NULL,
-					expires_at DATETIME NOT NULL,
-					FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-				)",
-				"CREATE TABLE pages (
-					id INT AUTO_INCREMENT PRIMARY KEY,
-					title VARCHAR(255) NOT NULL,
-					content TEXT NOT NULL,
-					slug VARCHAR(100) NOT NULL UNIQUE,
-					use_template TINYINT(1) DEFAULT 1,
-					is_home TINYINT(1) DEFAULT 0
-				)",
-				"CREATE TABLE plugins (
-					name VARCHAR(100) NOT NULL PRIMARY KEY,
-					active TINYINT(1) DEFAULT 0
-				)",
-				"CREATE TABLE uploads (
-					id INT AUTO_INCREMENT PRIMARY KEY,
-					post_id INT NULL,
-					filename VARCHAR(255) NOT NULL,
-					original_name VARCHAR(255) NOT NULL,
-					mime_type VARCHAR(100) NOT NULL,
-					size INT NOT NULL,
-					upload_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-					user_id INT NOT NULL,
-					FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE SET NULL,
-					FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-				)",
-				"CREATE TABLE notes (
-					id INT AUTO_INCREMENT PRIMARY KEY,
-					user_id INT NOT NULL,
-					content TEXT NOT NULL,
-					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-					updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-					FOREIGN KEY (user_id) REFERENCES users(id)
-				)"
-			];
+            $tables = [
+                "CREATE TABLE users (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    username VARCHAR(50) NOT NULL UNIQUE,
+                    password VARCHAR(255) NOT NULL,
+                    email VARCHAR(100) NOT NULL UNIQUE,
+                    role ENUM('user', 'editor', 'admin') DEFAULT 'user',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )",
+                "CREATE TABLE categories (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(100) NOT NULL,
+                    slug VARCHAR(100) NOT NULL UNIQUE,
+                    description TEXT
+                )",
+                "CREATE TABLE settings (
+                    name VARCHAR(100) NOT NULL PRIMARY KEY,
+                    value TEXT NOT NULL
+                )",
+                "CREATE TABLE posts (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    title VARCHAR(255) NOT NULL,
+                    content TEXT NOT NULL,
+                    user_id INT,
+                    category_id INT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+                    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
+                )",
+                "CREATE TABLE comments (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    post_id INT NOT NULL,
+                    user_id INT DEFAULT NULL,
+                    content TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
+                    FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+                )",
+                "CREATE TABLE password_resets (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT NOT NULL,
+                    token VARCHAR(64) NOT NULL,
+                    expires_at DATETIME NOT NULL,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                )",
+                "CREATE TABLE pages (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    title VARCHAR(255) NOT NULL,
+                    content TEXT NOT NULL,
+                    slug VARCHAR(100) NOT NULL UNIQUE,
+                    use_template TINYINT(1) DEFAULT 1,
+                    is_home TINYINT(1) DEFAULT 0
+                )",
+                "CREATE TABLE plugins (
+                    name VARCHAR(100) NOT NULL PRIMARY KEY,
+                    active TINYINT(1) DEFAULT 0
+                )",
+                "CREATE TABLE uploads (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    post_id INT NULL,
+                    filename VARCHAR(255) NOT NULL,
+                    original_name VARCHAR(255) NOT NULL,
+                    mime_type VARCHAR(100) NOT NULL,
+                    size INT NOT NULL,
+                    upload_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    user_id INT NOT NULL,
+                    FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE SET NULL,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                )",
+                "CREATE TABLE notes (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )"
+            ];
 
             $all_tables_created = true;
             foreach ($tables as $sql) {
@@ -152,7 +152,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $settings_sql = "INSERT INTO settings (name, value) VALUES 
                                     ('site_name', '" . mysqli_real_escape_string($conn, $site_name) . "'),
                                     ('site_desc', '" . mysqli_real_escape_string($conn, $site_desc) . "'),
-                                    ('site_keywords', '" . mysqli_real_escape_string($conn, $site_keywords) . "')";
+                                    ('site_keywords', '" . mysqli_real_escape_string($conn, $site_keywords) . "'),
+                                    ('use_php_mail', '0')
+                                    ON DUPLICATE KEY UPDATE value = VALUES(value)";
                     if (!mysqli_query($conn, $settings_sql)) {
                         $error = "Ошибка сохранения настроек: " . mysqli_error($conn);
                     } else {
